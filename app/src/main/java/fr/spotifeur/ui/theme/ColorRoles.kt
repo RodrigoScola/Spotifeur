@@ -147,12 +147,12 @@ fun generateColorSchemeFromSeed(
             sourceHct = sourceHct,
             paletteStyle = paletteStyle,
             isDark = false
-        ).toComposeColorScheme()
+        ).toComposeColorScheme().deepControlsForLight()
         val darkScheme = createDynamicScheme(
             sourceHct = sourceHct,
             paletteStyle = paletteStyle,
             isDark = true
-        ).toComposeColorScheme()
+        ).toComposeColorScheme().deepenedForArtwork(sourceHct)
         if (shouldForceNeutral) {
             ColorSchemePair(
                 light = lightScheme.toGrayscaleColorScheme(),

@@ -73,6 +73,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -926,7 +927,8 @@ fun QueueBottomSheet(
                                                 Icon(
                                                     imageVector = Icons.Rounded.DragIndicator,
                                                     contentDescription = stringResource(R.string.queue_cd_reorder_song),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    // The row's content colour: also readable on the current track's accent.
+                                                    tint = LocalContentColor.current.copy(alpha = 0.72f)
                                                 )
                                             }
                                         }
@@ -1894,9 +1896,11 @@ fun QueuePlaylistSongItem(
         label = "elevationAnimation"
     )
 
-    val backgroundColor = colors.surfaceContainerLowest
-    val mvContainerColor = if (isCurrentSong) colors.tertiaryContainer else colors.surfaceContainerHigh
-    val mvContentColor = if (isCurrentSong) colors.onTertiaryContainer else colors.onSurface
+    // The current track is the accent itself, like the playing row of the other lists.
+    val backgroundColor = if (isCurrentSong) colors.primary else colors.surfaceContainerLowest
+    val currentContentColor = colors.onPrimary
+    val mvContainerColor = if (isCurrentSong) colors.onPrimary else colors.surfaceContainerHigh
+    val mvContentColor = if (isCurrentSong) colors.primary else colors.onSurface
     val hapticView = LocalView.current
     val appHapticsConfig = LocalAppHapticsConfig.current
     val dismissScope = rememberCoroutineScope()
@@ -2050,14 +2054,14 @@ fun QueuePlaylistSongItem(
                     Column(Modifier.weight(1f)) {
                         Text(
                             song.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = if (isCurrentSong) colors.primary else colors.onSurface,
+                            color = if (isCurrentSong) currentContentColor else colors.onSurface,
                             fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
                             song.displayArtist, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isCurrentSong) colors.primary.copy(alpha = 0.8f) else colors.onSurfaceVariant
+                            color = if (isCurrentSong) currentContentColor.copy(alpha = 0.75f) else colors.onSurfaceVariant
                         )
                     }
 
@@ -2067,7 +2071,7 @@ fun QueuePlaylistSongItem(
                                 modifier = Modifier
                                     .padding(start = 8.dp)
                                     .size(width = 18.dp, height = 16.dp),
-                                color = colors.secondary,
+                                color = currentContentColor,
                                 isPlaying = isPlaying
                             )
                             Spacer(Modifier.width(4.dp))

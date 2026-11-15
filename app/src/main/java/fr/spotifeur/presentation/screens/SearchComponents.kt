@@ -3,6 +3,12 @@ package fr.spotifeur.presentation.screens
 import fr.spotifeur.presentation.components.SmartImageListTargetSize
 import fr.spotifeur.utils.formatSongCount
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import fr.spotifeur.presentation.components.label
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -595,11 +601,21 @@ fun SearchFilterChip(
     )
 }
 
-/** What was opened or played from search, with its picture, kind and a button to remove it. */
+/**
+ * What was opened or played from search, with its picture, kind and a button to remove it.
+ * A tap leaves the entry where it is. The current track ([playingTrackId]) is highlighted like
+ * the playing row of the track lists, the entry last tapped ([selectedKey], see [historyKey])
+ * with the selected colours. A swipe to the right runs [swipeAction] of the entry, if any.
+ */
 @Composable
 fun SearchResultHistoryList(
     items: List<Music>,
+    selectedKey: String?,
+    playingTrackId: String?,
+    savedIds: Set<String>,
+    swipeAction: (Music) -> fr.spotifeur.presentation.components.TrackSwipeAction?,
     onOpen: (Music) -> Unit,
+    onSwipe: (Music, fr.spotifeur.presentation.components.TrackSwipeAction) -> Unit,
     onDelete: (Music) -> Unit,
     onClearAll: () -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
@@ -620,47 +636,112 @@ fun SearchResultHistoryList(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = bottomPadding),
         ) {
-            items(items, key = { "history_${it.kind}_${it.id}" }, contentType = { "search_history" }) { item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .clickable { onOpen(item) }.padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            items(items, key = { "history_${historyKey(it)}" }, contentType = { "search_history" }) { item ->
+                val playing = item.kind == MusicKind.Track && item.id == playingTrackId
+                val selected = playing || historyKey(item) == selectedKey
+                val colors = MaterialTheme.colorScheme
+                // Opaque even when not highlighted: a swipe slides the row over the action behind it.
+                val container by animateColorAsState(
+                    when { playing -> colors.primary; selected -> colors.secondaryContainer; else -> colors.background },
+                    label = "historyContainer",
+                )
+                val content by animateColorAsState(
+                    when { playing -> colors.onPrimary; selected -> colors.onSecondaryContainer; else -> colors.onSurface },
+                    label = "historyContent",
+                )
+                val secondaryContent by animateColorAsState(
+                    when {
+                        playing -> colors.onPrimary.copy(alpha = 0.8f)
+                        selected -> colors.onSecondaryContainer.copy(alpha = 0.8f)
+                        else -> colors.onSurfaceVariant
+                    },
+                    label = "historySecondary",
+                )
+                val action = swipeAction(item)
+                val actionLabel = action?.let {
+                    if (it == fr.spotifeur.presentation.components.TrackSwipeAction.LIKE && item.kind != MusicKind.Track) {
+                        stringResource(if (item.id in savedIds) R.string.saved_remove else R.string.saved_add)
+                    } else it.label()
+                }
+                val shape = RoundedCornerShape(if (selected) 20.dp else 12.dp)
+                fr.spotifeur.presentation.components.SwipeActionBox(
+                    right = action,
+                    left = null,
+                    shape = shape,
+                    modifier = Modifier.fillMaxWidth(),
+                    onAction = { onSwipe(item, it) },
                 ) {
-                    fr.spotifeur.presentation.components.SmartImage(
-                        model = item.imageUrl, contentDescription = null,
-                        shape = if (item.kind == MusicKind.Artist) CircleShape else RoundedCornerShape(8.dp),
-                        modifier = Modifier.size(52.dp),
-                    )
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val kind = stringResource(when (item.kind) {
-                            MusicKind.Track -> R.string.search_history_kind_track
-                            MusicKind.Album -> R.string.search_history_kind_album
-                            MusicKind.Artist -> R.string.search_history_kind_artist
-                            else -> R.string.search_history_kind_playlist
-                        })
-                        val detail = item.subtitle.takeIf { it.isNotBlank() && item.kind != MusicKind.Artist }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Where the result comes from, as in the result list. A multi-service playlist has no single source.
-                            val source = when {
-                                item.id.startsWith(fr.spotifeur.data.LOCAL_PLAYLIST_PREFIX) -> null
-                                item.id.startsWith(fr.spotifeur.data.youtube.YTM_PLAYLIST_PREFIX) -> fr.spotifeur.data.MusicSource.YouTubeMusic
-                                else -> fr.spotifeur.data.musicSourceOf(item.id)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(shape).background(container)
+                            .semantics {
+                                this.selected = selected
+                                if (action != null && actionLabel != null) {
+                                    customActions = listOf(CustomAccessibilityAction(actionLabel) { onSwipe(item, action); true })
+                                }
                             }
-                            if (source != null && fr.spotifeur.presentation.components.LocalSourceBadges.current) {
-                                fr.spotifeur.presentation.components.SourceBadge(source, Modifier.padding(end = 6.dp),
-                                    MaterialTheme.colorScheme.onSurfaceVariant)
+                            .clickable { onOpen(item) }.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        fr.spotifeur.presentation.components.SmartImage(
+                            model = item.imageUrl, contentDescription = null,
+                            shape = if (item.kind == MusicKind.Artist) CircleShape else RoundedCornerShape(8.dp),
+                            modifier = Modifier.size(52.dp),
+                        )
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(item.title, style = MaterialTheme.typography.bodyLarge, color = content,
+                                fontWeight = if (playing) FontWeight.Bold else if (selected) FontWeight.SemiBold else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val kind = stringResource(when (item.kind) {
+                                MusicKind.Track -> R.string.search_history_kind_track
+                                MusicKind.Album -> R.string.search_history_kind_album
+                                MusicKind.Artist -> R.string.search_history_kind_artist
+                                else -> R.string.search_history_kind_playlist
+                            })
+                            val detail = item.subtitle.takeIf { it.isNotBlank() && item.kind != MusicKind.Artist }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Where the result comes from, as in the result list. A multi-service playlist has no single source.
+                                val source = when {
+                                    item.id.startsWith(fr.spotifeur.data.LOCAL_PLAYLIST_PREFIX) -> null
+                                    item.id.startsWith(fr.spotifeur.data.youtube.YTM_PLAYLIST_PREFIX) -> fr.spotifeur.data.MusicSource.YouTubeMusic
+                                    else -> fr.spotifeur.data.musicSourceOf(item.id)
+                                }
+                                if (source != null && fr.spotifeur.presentation.components.LocalSourceBadges.current) {
+                                    fr.spotifeur.presentation.components.SourceBadge(source, Modifier.padding(end = 6.dp),
+                                        secondaryContent)
+                                }
+                                Text(listOfNotNull(kind, detail).joinToString(" • "), style = MaterialTheme.typography.bodySmall,
+                                    color = secondaryContent, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text(listOfNotNull(kind, detail).joinToString(" • "), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                    }
-                    IconButton(onClick = { onDelete(item) }) {
-                        Icon(Icons.Rounded.Close, stringResource(R.string.search_cd_delete_search_history_item),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                        IconButton(onClick = { onDelete(item) }) {
+                            Icon(Icons.Rounded.Close, stringResource(R.string.search_cd_delete_search_history_item),
+                                tint = secondaryContent.copy(alpha = secondaryContent.alpha * 0.7f))
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** Identifies a search history entry; the same id can come back under another kind. */
+fun historyKey(item: Music): String = "${item.kind}_${item.id}"
+
+/**
+ * What a swipe to the right does on a recent search, from the "Swipe right" setting of track
+ * rows. Queue and "play next" work for every kind, as in the menus (an album, artist or playlist
+ * brings its tracks). A like is for tracks, and for Spotify albums and artists, which the library
+ * can save; anything else gets no gesture.
+ */
+fun historySwipeAction(
+    setting: fr.spotifeur.presentation.components.TrackSwipeAction?,
+    item: Music,
+): fr.spotifeur.presentation.components.TrackSwipeAction? = when (setting) {
+    fr.spotifeur.presentation.components.TrackSwipeAction.ADD_TO_QUEUE,
+    fr.spotifeur.presentation.components.TrackSwipeAction.PLAY_NEXT -> setting
+    fr.spotifeur.presentation.components.TrackSwipeAction.LIKE -> setting.takeIf {
+        item.kind == MusicKind.Track ||
+            ((item.kind == MusicKind.Album || item.kind == MusicKind.Artist) && fr.spotifeur.data.musicSourceOf(item.id) == fr.spotifeur.data.MusicSource.Spotify)
+    }
+    // Removal belongs to editable playlists.
+    else -> null
 }

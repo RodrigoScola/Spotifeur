@@ -76,6 +76,10 @@
     <string name="radio">Radio</string>
     <string name="saved_remove">Retirer de la bibliothèque</string>
     <string name="saved_add">Enregistrer dans la bibliothèque</string>
+    <string name="liked_added">Ajouté aux Titres likés</string>
+    <string name="liked_removed">Retiré des Titres likés</string>
+    <string name="saved_added">Enregistré dans la bibliothèque</string>
+    <string name="saved_removed">Retiré de la bibliothèque</string>
     <string name="album_not_found">Album introuvable pour ce titre.</string>
     <string name="artist_not_found">Artiste introuvable pour ce titre.</string>
     <string name="queue_added">Ajouté à la file d’attente</string>
@@ -229,7 +233,7 @@
     <string name="settings_pages_in_bar">Sur la page</string>
     <string name="settings_pages_in_menu">Dans le menu ⋮</string>
     <string name="settings_pages_reset">Rétablir les boutons par défaut</string>
-    <string name="settings_swipe_right_subtitle">Ce qui se passe quand vous faites glisser un titre vers la droite</string>
+    <string name="settings_swipe_right_subtitle">Ce qui se passe quand vous faites glisser un titre ou une recherche récente vers la droite</string>
     <string name="settings_swipe_left_subtitle">Ce qui se passe quand vous faites glisser un titre vers la gauche</string>
     <string name="settings_swipe_right_title">Glisser vers la droite</string>
     <string name="settings_swipe_left_title">Glisser vers la gauche</string>

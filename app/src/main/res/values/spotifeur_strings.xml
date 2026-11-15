@@ -76,6 +76,10 @@
     <string name="radio">Radio</string>
     <string name="saved_remove">Remove from library</string>
     <string name="saved_add">Save to library</string>
+    <string name="liked_added">Added to Liked songs</string>
+    <string name="liked_removed">Removed from Liked songs</string>
+    <string name="saved_added">Saved to library</string>
+    <string name="saved_removed">Removed from library</string>
     <string name="album_not_found">No album found for this track.</string>
     <string name="artist_not_found">No artist found for this track.</string>
     <string name="queue_added">Added to queue</string>
@@ -229,7 +233,7 @@
     <string name="settings_pages_in_bar">On the page</string>
     <string name="settings_pages_in_menu">In the ⋮ menu</string>
     <string name="settings_pages_reset">Restore the default buttons</string>
-    <string name="settings_swipe_right_subtitle">What happens when you swipe a track to the right</string>
+    <string name="settings_swipe_right_subtitle">What happens when you swipe a track or a recent search to the right</string>
     <string name="settings_swipe_left_subtitle">What happens when you swipe a track to the left</string>
     <string name="settings_swipe_right_title">Swipe right</string>
     <string name="settings_swipe_left_title">Swipe left</string>

@@ -91,12 +91,37 @@ fun TrackSwipeBox(
         Box(modifier) { content() }
         return
     }
+    val currentSong by rememberUpdatedState(song)
+    val currentRemove by rememberUpdatedState(onRemove)
+    SwipeActionBox(right, left, shape, modifier, onAction = { action ->
+        if (action == TrackSwipeAction.REMOVE) currentRemove?.invoke() else config.perform(action, currentSong)
+    }, content = content)
+}
+
+/**
+ * The gesture and look of [TrackSwipeBox] with actions chosen by the caller, for rows that are
+ * not tracks of a list (recent searches, for example). A null direction is left to the parent. The drag only
+ * starts once the finger has moved sideways past the touch slop, so vertical scrolling and taps
+ * on the content keep working.
+ */
+@Composable
+fun SwipeActionBox(
+    right: TrackSwipeAction?,
+    left: TrackSwipeAction?,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+    onAction: (TrackSwipeAction) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    if (right == null && left == null) {
+        Box(modifier) { content() }
+        return
+    }
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val threshold = with(LocalDensity.current) { 96.dp.toPx() }
-    val currentSong by rememberUpdatedState(song)
-    val currentRemove by rememberUpdatedState(onRemove)
+    val currentAction by rememberUpdatedState(onAction)
     val shown = if (offset.value > 0) right else if (offset.value < 0) left else null
     val reached = abs(offset.value) >= threshold
     val iconScale by animateFloatAsState(if (reached) 1.15f else 0.85f, spring(Spring.DampingRatioMediumBouncy), label = "swipeIcon")
@@ -141,11 +166,7 @@ fun TrackSwipeBox(
                         else -> left
                     }
                     scope.launch { offset.animateTo(0f, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)) }
-                    when (action) {
-                        null -> Unit
-                        TrackSwipeAction.REMOVE -> currentRemove?.invoke()
-                        else -> config.perform(action, currentSong)
-                    }
+                    if (action != null) currentAction(action)
                 }
             }) { content() }
     }
@@ -159,7 +180,7 @@ private fun TrackSwipeAction.icon() = when (this) {
 }
 
 @Composable
-private fun TrackSwipeAction.label() = stringResource(when (this) {
+internal fun TrackSwipeAction.label() = stringResource(when (this) {
     TrackSwipeAction.ADD_TO_QUEUE -> R.string.swipe_action_queue
     TrackSwipeAction.PLAY_NEXT -> R.string.swipe_action_next
     TrackSwipeAction.LIKE -> R.string.swipe_action_like

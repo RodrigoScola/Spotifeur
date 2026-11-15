@@ -4,6 +4,17 @@
 
 Nothing yet.
 
+## v1.6.0
+
+### Added
+
+- Recent searches can be swiped to the right. The gesture follows the "Swipe right" setting of track rows, with the same reveal and vibration: "Add to queue" and "Play next" work for every entry, as in the menus (an album, artist or playlist brings its tracks); "Like" works on tracks and on Spotify albums and artists, with a message saying whether it was saved or removed, since the row shows no heart; with "Nothing", or "Like" on a playlist, the row has no gesture. The action is also offered to accessibility services. The setting's description says it applies to recent searches.
+
+### Changed
+
+- Tapping a recent search leaves it where it is in the list; only results opened from a new search go to the top. The current track is highlighted in the list like the playing row of track lists (`primary`), and the entry last tapped with the selected colours (`secondaryContainer`). Albums and playlists are not marked as playing: the player does not keep the collection a queue came from.
+- Colours with more contrast. Dark player themed by the cover: deep backgrounds in the cover's hue and near-white controls instead of Material's tone-30 containers and pastel fixed roles (`deepenedForArtwork`); a light glow at the top of the player behind the cover. Light player: previous/next, play/pause and the active toggles are deep tints on the light background instead of tone-80 buttons on tone 90 (`deepControlsForLight`, also for the lyrics sheet). The wallpaper scheme gets stronger accents in both themes (`vividAccents`). The playing row of track lists and the queue uses the accent itself (`primary`/`onPrimary`). Home cards: the blurred cover is saturated and darkened under a gradient, the Liked songs card uses it too, and cards without a cover get a deep accent backdrop so the white texts stay readable in the light theme. Play buttons of album and artist pages use `primary`. The colour cache key moves to `algo_v8`.
+
 ## v1.5.0
 
 ### Added

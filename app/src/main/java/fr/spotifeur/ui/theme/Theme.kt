@@ -117,10 +117,14 @@ fun SpotifeurTheme(
         colorSchemePairOverride == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             // Tema dinámico del sistema como prioridad si no hay override
             try {
-                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                if (darkTheme) {
+                    dynamicDarkColorScheme(context).vividAccents()
+                } else {
+                    dynamicLightColorScheme(context).vividAccents().deepControlsForLight()
+                }
             } catch (e: Exception) {
                 // Fallback a los defaults si dynamic colors falla (raro, pero posible en algunos dispositivos)
-                if (darkTheme) DarkColorScheme else LightColorScheme
+                if (darkTheme) DarkColorScheme else LightColorScheme.deepControlsForLight()
             }
         }
         colorSchemePairOverride != null -> {
@@ -129,7 +133,7 @@ fun SpotifeurTheme(
         }
         // Fallback final a los defaults si no hay override ni dynamic colors aplicables
         darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else -> LightColorScheme.deepControlsForLight()
     }
 
     SpotifeurStatusBarStyle(

@@ -335,6 +335,20 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
         else model.toggleFavorite(song.toMusic())
     }
 
+    /** Like from a row that shows no heart (recent searches): says what changed. */
+    fun toggleSavedWithMessage(item: Music) {
+        val wasSaved = item.id in model.favorites.value
+        if (item.kind == MusicKind.Track) {
+            val song = item.toSong(wasSaved)
+            if (song.isLocal) { toggleFavoriteSpecificSong(song); return }
+            model.toggleFavorite(item)
+            sendToast(context.getString(if (wasSaved) R.string.liked_removed else R.string.liked_added))
+        } else {
+            model.toggleFavorite(item)
+            sendToast(context.getString(if (wasSaved) R.string.saved_removed else R.string.saved_added))
+        }
+    }
+
     /** Adds whatever [item] holds to a local playlist, which accepts Spotify and local tracks alike. */
     fun addToLocalPlaylist(playlistId: String, item: Music) = withTracks(item) { tracks ->
         model.localPlaylistStore.add(playlistId, tracks)
@@ -425,6 +439,7 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
         mutableHistory.value = items
         uiPrefs.edit { putString(KEY_HISTORY_ITEMS, fr.spotifeur.data.encodePins(items)) }
     }
+    /** A result opened from a search goes first. A tap on a recent search does not call this: it keeps its place. */
     fun rememberSearchResult(item: Music) =
         writeHistory((listOf(item) + mutableHistory.value.filterNot { it.id == item.id }).take(MAX_HISTORY))
     fun forgetSearch(item: Music) = writeHistory(mutableHistory.value.filterNot { it.id == item.id })

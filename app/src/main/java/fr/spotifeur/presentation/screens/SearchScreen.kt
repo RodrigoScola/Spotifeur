@@ -43,6 +43,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import fr.spotifeur.presentation.components.LocalTrackSwipe
+import fr.spotifeur.presentation.components.TrackSwipeAction
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -120,12 +122,21 @@ fun SearchScreen(
     }
     val songs = remember(results, saved) { results.filter { it.kind == MusicKind.Track }.map { it.toSong(it.id in saved) } }
     val listState = rememberLazyListState()
-    val open: (Music) -> Unit = {
+    // Recent searches follow the "Swipe right" setting of track rows.
+    val swipeRight = LocalTrackSwipe.current?.right
+    // The recent search last tapped: highlighted, and left where it is in the list.
+    var selectedHistoryKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val rememberResult: (Music) -> Unit = {
+        // A result opened from a new search goes to the top of the recent searches.
         ui.rememberSearchResult(it)
+        selectedHistoryKey = null
+    }
+    val open: (Music) -> Unit = {
+        rememberResult(it)
         navController.openMusic(ui, it)
     }
     val playFromHistory: (Music) -> Unit = { item ->
-        ui.rememberSearchResult(item)
+        selectedHistoryKey = historyKey(item)
         if (item.kind == MusicKind.Track) item.toSong(item.id in saved).let { song -> ui.playSongs(listOf(song), song, item.title) }
         else navController.openMusic(ui, item)
     }
@@ -240,7 +251,20 @@ fun SearchScreen(
                     if (history.isNotEmpty()) {
                         SearchResultHistoryList(
                             items = history,
+                            selectedKey = selectedHistoryKey,
+                            playingTrackId = stable.currentSong?.id,
+                            savedIds = saved,
+                            swipeAction = { historySwipeAction(swipeRight, it) },
                             onOpen = playFromHistory,
+                            onSwipe = { item, action ->
+                                when (action) {
+                                    // As the menus: a track, or the tracks of an album, artist or playlist.
+                                    TrackSwipeAction.ADD_TO_QUEUE -> ui.addItemToQueue(item)
+                                    TrackSwipeAction.PLAY_NEXT -> ui.addItemNext(item)
+                                    TrackSwipeAction.LIKE -> ui.toggleSavedWithMessage(item)
+                                    else -> Unit
+                                }
+                            },
                             onDelete = ui::forgetSearch,
                             onClearAll = ui::clearSearchHistory,
                             bottomPadding = paddingValues.calculateBottomPadding() + MiniPlayerHeight + 24.dp,
@@ -309,7 +333,7 @@ fun SearchScreen(
                                                 onMoreOptionsClick = { selected = it },
                                                 onLongPress = { selected = song },
                                                 onClick = {
-                                                    ui.rememberSearchResult(item)
+                                                    rememberResult(item)
                                                     ui.playSongs(songs, song, searchQuery)
                                                 },
                                                 showSourceBadge = true,
