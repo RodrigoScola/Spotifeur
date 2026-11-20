@@ -5,7 +5,6 @@ import fr.spotifeur.data.Music
 import fr.spotifeur.data.MusicKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,12 +20,22 @@ class EndlessQueueTest {
         assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 0, repeatMode = Player.REPEAT_MODE_ONE))
     }
 
-    @Test fun seedIsTheLastTrackWithSimilarTracks() {
+    @Test fun seedsStartWithTheLastTrackThenSpreadOverTheContext() {
+        val context = (0 until 20).map(::spotify) + track("local:x")
+        assertEquals(listOf(19, 0, 4, 9, 14).map { "spotify:track:$it" }, EndlessQueue.seeds(context, spotify = true).map(Music::id))
+    }
+
+    @Test fun seedsNeedASourceForSimilarTracks() {
         val queue = listOf(track("ytm:track:x"), spotify(1), spotify(2), track("local:3"))
-        assertEquals("spotify:track:2", EndlessQueue.seed(queue, spotify = true)?.id)
-        assertEquals("ytm:track:x", EndlessQueue.seed(queue, spotify = false)?.id)
-        assertNull(EndlessQueue.seed(listOf(spotify(1), track("local:3")), spotify = false))
-        assertNull(EndlessQueue.seed(emptyList(), spotify = true))
+        assertEquals(listOf("spotify:track:2", "ytm:track:x", "spotify:track:1"), EndlessQueue.seeds(queue, spotify = true).map(Music::id))
+        // Without a Spotify account, only YouTube Music tracks seed.
+        assertEquals(listOf("ytm:track:x"), EndlessQueue.seeds(queue, spotify = false).map(Music::id))
+        assertTrue(EndlessQueue.seeds(listOf(spotify(1), track("local:3")), spotify = false).isEmpty())
+        assertTrue(EndlessQueue.seeds(emptyList(), spotify = true).isEmpty())
+    }
+
+    @Test fun aRepeatedLastTrackIsOnlyOneSeed() {
+        assertEquals(listOf("spotify:track:1", "spotify:track:2"), EndlessQueue.seeds(listOf(spotify(1), spotify(2), spotify(1)), spotify = true).map(Music::id))
     }
 
     @Test fun pickSkipsQueuedAndRecentTracks() {

@@ -85,10 +85,10 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
     private var before: List<Music> = emptyList()
     private var after: List<Music> = emptyList()
     /**
-     * Similar tracks for the endless queue, given a seed and the ids already in the context.
+     * Similar tracks for the endless queue, given seeds from the context and the ids already in it.
      * Returns null when they could not be fetched. Set by the model, which holds the Spotify session.
      */
-    var autoplay: (suspend (seed: Music, excluded: Set<String>) -> List<Music>?)? = null
+    var autoplay: (suspend (seeds: List<Music>, excluded: Set<String>) -> List<Music>?)? = null
     private var autoplayJob: Job? = null
     /** Off after a stop, a cleared queue or a failed or empty fetch, until the next [play]. */
     private var autoplayArmed = true
@@ -196,11 +196,11 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
         if (!autoplayArmed || autoplayJob?.isActive == true) return
         if (!fr.spotifeur.data.preferences.SettingsStore.get(appContext).settings.value.endlessQueue) return
         if (!fr.spotifeur.data.NetworkMonitor.online.value) return
-        val window = (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
-        val seed = EndlessQueue.seed(window, spotify = fr.spotifeur.data.SpotifyAccount.signedIn) ?: return
-        val excluded = (before + window).mapTo(HashSet(), Music::id)
+        val context = before + (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
+        val seeds = EndlessQueue.seeds(context, spotify = fr.spotifeur.data.SpotifyAccount.signedIn).ifEmpty { return }
+        val excluded = context.mapTo(HashSet(), Music::id)
         autoplayJob = scope.launch {
-            val added = fetch(seed, excluded)
+            val added = fetch(seeds, excluded)
             // Cancelled by play(), stop() or a cleared queue: a late answer is dropped with the coroutine.
             if (added.isNullOrEmpty()) { autoplayArmed = false; return@launch }
             val ended = player.playbackState == Player.STATE_ENDED

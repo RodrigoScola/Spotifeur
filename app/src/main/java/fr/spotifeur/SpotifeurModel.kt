@@ -54,6 +54,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -864,13 +866,21 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
     init {
-        // The endless queue reads YouTube Music's automix for a YouTube Music track, Spotify's radio for
-        // a Spotify track. One failure is reported, then the player stops asking until the next playback.
-        player.autoplay = autoplay@{ seed, queued ->
+        // The endless queue interleaves, for each seed, YouTube Music's automix of a YouTube Music track
+        // or Spotify's radio of a Spotify track, as the playlist recommendations do. A seed that fails is
+        // skipped; if all fail, one message is shown and the player stops asking until the next playback.
+        player.autoplay = autoplay@{ seeds, queued ->
             try {
-                val videoId = seed.youTubeVideoId
-                val similar = if (videoId != null) withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }
-                    else (radio ?: return@autoplay null).station(seed).tracks
+                val stations = coroutineScope { seeds.map { seed -> async {
+                    try {
+                        val videoId = seed.youTubeVideoId
+                        if (videoId != null) withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }
+                        else radio?.station(seed)?.tracks
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { null }
+                } }.awaitAll().filterNotNull() }
+                if (stations.isEmpty()) throw IllegalStateException("No similar tracks")
+                val similar = fr.spotifeur.data.interleaveStations(stations, limit = Int.MAX_VALUE)
                 val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
                     .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track.id }
                 fr.spotifeur.playback.EndlessQueue.pick(similar, queued + recent)

@@ -16,12 +16,20 @@ internal object EndlessQueue {
     fun shouldExtend(remaining: Int, contextLeft: Int, repeatMode: Int): Boolean =
         contextLeft == 0 && repeatMode == Player.REPEAT_MODE_OFF && remaining < THRESHOLD
 
+    /** Seeds per refill: the last track, then tracks spread over the rest of the context. */
+    const val SEEDS = 5
+
     /**
-     * The most recent track that can seed similar tracks: a YouTube Music track, or a Spotify
-     * track when a Spotify account is signed in (its radio needs the session).
+     * Tracks that seed similar tracks, so the whole playlist or album counts and not only its end:
+     * the most recent one first, then others spread across the context. A seed is a YouTube Music
+     * track, or a Spotify track when a Spotify account is signed in (its radio needs the session).
      */
-    fun seed(queue: List<Music>, spotify: Boolean): Music? =
-        queue.lastOrNull { it.id.startsWith(YOUTUBE_TRACK) || (spotify && it.id.startsWith(SPOTIFY_TRACK)) }
+    fun seeds(context: List<Music>, spotify: Boolean, count: Int = SEEDS): List<Music> {
+        val eligible = context.filter { it.id.startsWith(YOUTUBE_TRACK) || (spotify && it.id.startsWith(SPOTIFY_TRACK)) }
+        val last = eligible.lastOrNull() ?: return emptyList()
+        val rest = eligible.filter { it.id != last.id }.distinctBy(Music::id)
+        return listOf(last) + fr.spotifeur.data.spreadAlbumSeeds(rest, count - 1)
+    }
 
     /** Tracks not already queued or recently played, each once, in the source's order. */
     fun pick(candidates: List<Music>, excluded: Set<String>, limit: Int = BATCH): List<Music> =
