@@ -320,6 +320,9 @@ class PlayerViewModel(val model: SpotifeurModel, private val scope: CoroutineSco
     /** How many tracks the user queued after the current one, for the queue's sections. */
     val queuedCount: StateFlow<Int> = model.player.state.map { it.queuedCount }.distinctUntilChanged()
         .stateIn(scope, SharingStarted.Eagerly, 0)
+    /** Where the tracks added by the endless queue start in the queue, or -1. */
+    val autoplayStart: StateFlow<Int> = model.player.state.map { it.autoplayStart }.distinctUntilChanged()
+        .stateIn(scope, SharingStarted.Eagerly, -1)
     fun nextSong() = if (casting) cast.next() else model.player.next()
     fun previousSong() = if (casting) cast.previous() else model.player.previous()
     /** The previous track itself, whatever the position in the current one (mini player swipe). */

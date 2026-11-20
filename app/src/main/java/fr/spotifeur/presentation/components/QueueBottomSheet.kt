@@ -277,6 +277,7 @@ fun QueueBottomSheet(
     // Read show queue history preference
     val settingsState by viewModel.settings.collectAsStateWithLifecycle()
     val queuedState = remember(viewModel) { viewModel.queuedCount }.collectAsStateWithLifecycle()
+    val autoplayState = remember(viewModel) { viewModel.autoplayStart }.collectAsStateWithLifecycle()
     val showQueueHistory = settingsState.showQueueHistory
 
     // Offset to convert display indices to queue indices when history is hidden.
@@ -864,13 +865,17 @@ fun QueueBottomSheet(
 
                                     val firstQueued = queuedCount > 0 && queueIndex == currentSongIndex + 1
                                     val firstFromList = queuedCount > 0 && queueIndex == currentSongIndex + queuedCount + 1
+                                    // The tracks the endless queue added follow everything else.
+                                    val firstAuto = autoplayState.value > currentSongIndex && queueIndex == autoplayState.value
+                                    val divided = !firstQueued && (firstFromList || firstAuto)
                                     Column(Modifier.fillMaxWidth()) {
-                                    if (firstQueued || firstFromList) Column(Modifier.fillMaxWidth().padding(top = if (firstFromList) 6.dp else 0.dp)) {
-                                        if (firstFromList) androidx.compose.material3.HorizontalDivider(
+                                    if (firstQueued || divided) Column(Modifier.fillMaxWidth().padding(top = if (divided) 6.dp else 0.dp)) {
+                                        if (divided) androidx.compose.material3.HorizontalDivider(
                                             Modifier.padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant,
                                         )
                                         Text(
                                             if (firstQueued) stringResource(R.string.queue_section_queued)
+                                            else if (firstAuto) stringResource(R.string.queue_section_autoplay)
                                             else stringResource(R.string.queue_section_next_from, currentQueueSourceName.ifBlank { stringResource(R.string.queue_source_fallback_label) }),
                                             Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
