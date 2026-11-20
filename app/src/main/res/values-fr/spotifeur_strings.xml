@@ -348,6 +348,10 @@
     <string name="search_source_device">Appareil</string>
     <string name="queue_section_queued">File d’attente</string>
     <string name="queue_section_next_from">À suivre dans : %1$s</string>
+    <string name="queue_section_autoplay">Lecture automatique : titres similaires</string>
+    <string name="settings_endless_queue_title">File d’attente infinie</string>
+    <string name="settings_endless_queue_subtitle">Quand la file d’attente se termine, ajouter des titres Spotify similaires pour que la musique continue.</string>
+    <string name="endless_queue_failed">Impossible de trouver des titres similaires. La lecture continue avec la file d’attente actuelle.</string>
     <string name="settings_search_sources_title">Choisir la source de recherche</string>
     <string name="settings_search_sources_subtitle">Affiche Tout, Spotify, YouTube et Appareil au-dessus des résultats. Masqué, chaque recherche porte sur toutes les sources.</string>
 </resources>

@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Home
@@ -355,6 +356,7 @@ private fun PlaybackSettings(model: SpotifeurModel, navController: NavHostContro
         SwitchSettingItem(stringResource(R.string.settings_pause_on_volume_zero), stringResource(R.string.settings_pause_on_volume_zero_desc), s.pauseOnVolumeZero, { v -> update { it.copy(pauseOnVolumeZero = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_volume_down_24), null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_headphones_resume_title), stringResource(R.string.settings_headphones_resume_subtitle), s.resumeOnHeadphones, { v -> update { it.copy(resumeOnHeadphones = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_headphones_24), null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_persistent_shuffle_title), stringResource(R.string.settings_persistent_shuffle_subtitle), s.persistentShuffle, { v -> update { it.copy(persistentShuffle = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) })
+        SwitchSettingItem(stringResource(R.string.settings_endless_queue_title), stringResource(R.string.settings_endless_queue_subtitle), s.endlessQueue, { v -> update { it.copy(endlessQueue = v) } }, leadingIcon = { Icon(Icons.Rounded.AllInclusive, null, tint = MaterialTheme.colorScheme.secondary) })
         SwitchSettingItem(stringResource(R.string.settings_show_queue_history_title), stringResource(R.string.settings_show_queue_history_subtitle), s.showQueueHistory, { v -> update { it.copy(showQueueHistory = v) } }, leadingIcon = { Icon(painterResource(R.drawable.rounded_queue_music_24), null, tint = MaterialTheme.colorScheme.secondary) })
     }
 }

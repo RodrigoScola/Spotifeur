@@ -348,6 +348,10 @@
     <string name="search_source_device">Device</string>
     <string name="queue_section_queued">Next in queue</string>
     <string name="queue_section_next_from">Next from: %1$s</string>
+    <string name="queue_section_autoplay">Autoplay: similar tracks</string>
+    <string name="settings_endless_queue_title">Endless queue</string>
+    <string name="settings_endless_queue_subtitle">When the queue runs out, add similar Spotify tracks so the music keeps playing.</string>
+    <string name="endless_queue_failed">Similar tracks could not be found. Playback continues with the current queue.</string>
     <string name="settings_search_sources_title">Choose the search source</string>
     <string name="settings_search_sources_subtitle">Shows All, Spotify, YouTube and Device above the results. Hidden, every search reads all sources.</string>
 </resources>
