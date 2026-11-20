@@ -54,8 +54,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -865,28 +863,41 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
             catch (failure: Exception) { mutableMessage.value = readable(failure) }
         }
     }
+    /** The endless queue's failure message was shown and nothing was found since. */
+    private var endlessWarned = false
     init {
-        // The endless queue interleaves, for each seed, YouTube Music's automix of a YouTube Music track
-        // or Spotify's radio of a Spotify track, as the playlist recommendations do. A seed that fails is
-        // skipped; if all fail, one message is shown and the player stops asking until the next playback.
-        player.autoplay = autoplay@{ seeds, queued ->
-            try {
-                val stations = coroutineScope { seeds.map { seed -> async {
-                    try {
-                        val videoId = seed.youTubeVideoId
-                        if (videoId != null) withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }
-                        else radio?.station(seed)?.tracks
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { null }
-                } }.awaitAll().filterNotNull() }
-                if (stations.isEmpty()) throw IllegalStateException("No similar tracks")
-                val similar = fr.spotifeur.data.interleaveStations(stations, limit = Int.MAX_VALUE)
-                val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
-                    .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track.id }
-                fr.spotifeur.playback.EndlessQueue.pick(similar, queued + recent)
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed); null }
+        // The endless queue interleaves the similar tracks of every seed, as the playlist recommendations do.
+        // Seeds are read one after the other, so YouTube Music never gets a burst of requests.
+        player.autoplay = { seeds, context ->
+            val stations = seeds.map { similarTo(it) }
+            val found = stations.any(List<Music>::isNotEmpty)
+            if (!found && !endlessWarned) mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed)
+            endlessWarned = !found
+            val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
+                .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track }
+            fr.spotifeur.playback.EndlessQueue.pick(fr.spotifeur.data.interleaveStations(stations, Int.MAX_VALUE), context + recent)
         }
+    }
+    /**
+     * Spotify's radio for a Spotify track while signed in. Otherwise, or when the radio fails, YouTube
+     * Music's automix of the track or of its YouTube Music match, without that match. Empty when neither answers.
+     */
+    private suspend fun similarTo(seed: Music): List<Music> = try {
+        val station = radio?.takeIf { seed.youTubeVideoId == null }?.let { source ->
+            try { source.station(seed).tracks }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (auth: SpotifyAuthRequired) { accountLost(auth); null }
+            catch (_: Exception) { null }
+        }
+        station ?: youTubeVideoIdOf(seed)?.let { videoId ->
+            withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }.filter { it.youTubeVideoId != videoId }
+        }.orEmpty()
+    } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { emptyList() }
+    /** The YouTube Music recording of a track: its own, or the match of a Spotify track. */
+    private suspend fun youTubeVideoIdOf(track: Music): String? = track.youTubeVideoId ?: withContext(Dispatchers.IO) {
+        fr.spotifeur.data.youtube.TrackMatcher.resolve(fr.spotifeur.data.youtube.MatchQuery(
+            key = track.id, title = track.title, artists = track.subtitle, durationMs = track.durationMs, album = track.album,
+        ))
     }
     /** Album and artists of a track, read through the catalogue contract used by detail pages. */
     /**
@@ -897,11 +908,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         if (track.isLocalTrack) return emptyList()
         if (track.source == fr.spotifeur.data.MusicSource.Spotify && catalog != null) return detailForActions(track)?.related.orEmpty()
         if (!online.value) return emptyList()
-        val videoId = track.youTubeVideoId ?: withContext(Dispatchers.IO) {
-            fr.spotifeur.data.youtube.TrackMatcher.resolve(fr.spotifeur.data.youtube.MatchQuery(
-                key = track.id, title = track.title, artists = track.subtitle, durationMs = track.durationMs, album = track.album,
-            ))
-        } ?: return emptyList()
+        val videoId = youTubeVideoIdOf(track) ?: return emptyList()
         val found = withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.relations(videoId, track.title, track.subtitle) }
             ?: return emptyList()
         return listOfNotNull(found.album) + found.artists

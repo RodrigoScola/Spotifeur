@@ -2,6 +2,8 @@ package fr.spotifeur.playback
 
 import androidx.media3.common.Player
 import fr.spotifeur.data.Music
+import fr.spotifeur.data.spreadAlbumSeeds
+import fr.spotifeur.data.youtube.YTM_TRACK_PREFIX
 
 /** The endless queue: similar tracks added when the queue is about to run out. */
 internal object EndlessQueue {
@@ -11,32 +13,30 @@ internal object EndlessQueue {
     const val BATCH = 10
     /** Recent plays that are not added again. */
     const val HISTORY = 50
+    /** Seeds per refill: the last track, then tracks spread over the rest of the context. */
+    const val SEEDS = 5
 
     /** Only once the whole context has been loaded and nothing would repeat it. */
     fun shouldExtend(remaining: Int, contextLeft: Int, repeatMode: Int): Boolean =
         contextLeft == 0 && repeatMode == Player.REPEAT_MODE_OFF && remaining < THRESHOLD
 
-    /** Seeds per refill: the last track, then tracks spread over the rest of the context. */
-    const val SEEDS = 5
-
-    /**
-     * Tracks that seed similar tracks, so the whole playlist or album counts and not only its end:
-     * the most recent one first, then others spread across the context. A seed is a YouTube Music
-     * track, or a Spotify track when a Spotify account is signed in (its radio needs the session).
-     */
-    fun seeds(context: List<Music>, spotify: Boolean, count: Int = SEEDS): List<Music> {
-        val eligible = context.filter { it.id.startsWith(YOUTUBE_TRACK) || (spotify && it.id.startsWith(SPOTIFY_TRACK)) }
-        val last = eligible.lastOrNull() ?: return emptyList()
-        val rest = eligible.filter { it.id != last.id }.distinctBy(Music::id)
-        return listOf(last) + fr.spotifeur.data.spreadAlbumSeeds(rest, count - 1)
+    /** The last Spotify or YouTube Music track, then others spread over the context, so all of it counts. */
+    fun seeds(context: List<Music>, count: Int = SEEDS): List<Music> {
+        val tracks = context.filter(::isStreamed)
+        val last = tracks.lastOrNull() ?: return emptyList()
+        return listOf(last) + spreadAlbumSeeds(tracks.filter { it.id != last.id }.distinctBy(Music::id), count - 1)
     }
 
-    /** Tracks not already queued or recently played, each once, in the source's order. */
-    fun pick(candidates: List<Music>, excluded: Set<String>, limit: Int = BATCH): List<Music> =
-        candidates.asSequence()
-            .filter { (it.id.startsWith(SPOTIFY_TRACK) || it.id.startsWith(YOUTUBE_TRACK)) && it.id !in excluded }
-            .distinctBy(Music::id).take(limit).toList()
+    /**
+     * Tracks not already queued or recently played, each once, in the sources' order. A song is the same
+     * by id or by title and main artist, so its Spotify, YouTube Music song and music video versions count once.
+     */
+    fun pick(candidates: List<Music>, excluded: List<Music>, limit: Int = BATCH): List<Music> {
+        val seen = excluded.flatMapTo(HashSet()) { listOf(it.id, song(it)) }
+        return candidates.filter { isStreamed(it) && seen.add(it.id) and seen.add(song(it)) }.take(limit)
+    }
 
-    private const val SPOTIFY_TRACK = "spotify:track:"
-    private const val YOUTUBE_TRACK = fr.spotifeur.data.youtube.YTM_TRACK_PREFIX
+    private fun isStreamed(track: Music) = track.id.startsWith("spotify:track:") || track.id.startsWith(YTM_TRACK_PREFIX)
+    private fun song(track: Music) = if (track.title.isBlank()) track.id
+        else "${track.title.trim().lowercase()}|${track.subtitle.substringBefore(',').trim().lowercase()}"
 }
