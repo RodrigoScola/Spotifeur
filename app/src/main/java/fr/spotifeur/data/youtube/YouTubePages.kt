@@ -227,11 +227,30 @@ object YouTubePages {
         return YouTubeRelations(album, artistsOf(runs))
     }
 
+    /** YouTube Music's automix for a track: the `next` queue of its `RDAMVM` radio playlist. */
+    fun automix(videoId: String): List<Music> = parseAutomix(YouTubeMusic.browseRequest("next",
+        JSONObject().put("videoId", videoId).put("playlistId", "RDAMVM$videoId").put("isAudioOnly", true)))
+
     private fun JSONObject.runs(): JSONArray? = optJSONArray("runs")
     private fun JSONArray.firstText(): String? = optJSONObject(0)?.optString("text")?.takeIf(String::isNotBlank)
     private fun JSONArray.texts(): List<String> = (0 until length()).mapNotNull { optJSONObject(it)?.optString("text") }
 
     private val PLAYS = Regex("^([\\d.,]+[KMB]?) (?:plays|views)$")
+}
+
+/** The tracks of a `next` queue panel, in order. */
+internal fun parseAutomix(response: JSONObject): List<Music> {
+    val tracks = mutableListOf<Music>()
+    walkJson(response) { node ->
+        val panel = node.optJSONObject("playlistPanelVideoRenderer") ?: return@walkJson
+        val videoId = panel.optString("videoId").takeIf(String::isNotBlank) ?: return@walkJson
+        val text = { key: String -> panel.optJSONObject(key)?.optJSONArray("runs")?.optJSONObject(0)?.optString("text").orEmpty() }
+        val thumbnails = panel.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+        tracks += Music(YTM_TRACK_PREFIX + videoId, text("title"), text("shortBylineText"), MusicKind.Track,
+            imageUrl = largestYouTubeImage(thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url"), videoId),
+            durationMs = text("lengthText").takeIf(String::isNotBlank)?.let(::durationMs) ?: 0)
+    }
+    return tracks
 }
 
 /** "28.3M", "150K", "1.2B": the approximate value YouTube abbreviates. */

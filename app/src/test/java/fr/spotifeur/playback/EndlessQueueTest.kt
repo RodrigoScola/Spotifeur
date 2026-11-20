@@ -21,11 +21,12 @@ class EndlessQueueTest {
         assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 0, repeatMode = Player.REPEAT_MODE_ONE))
     }
 
-    @Test fun seedIsTheLastSpotifyTrack() {
-        val queue = listOf(spotify(1), spotify(2), track("ytm:track:x"), track("local:3"))
-        assertEquals("spotify:track:2", EndlessQueue.seed(queue)?.id)
-        assertNull(EndlessQueue.seed(listOf(track("ytm:track:x"))))
-        assertNull(EndlessQueue.seed(emptyList()))
+    @Test fun seedIsTheLastTrackWithSimilarTracks() {
+        val queue = listOf(track("ytm:track:x"), spotify(1), spotify(2), track("local:3"))
+        assertEquals("spotify:track:2", EndlessQueue.seed(queue, spotify = true)?.id)
+        assertEquals("ytm:track:x", EndlessQueue.seed(queue, spotify = false)?.id)
+        assertNull(EndlessQueue.seed(listOf(spotify(1), track("local:3")), spotify = false))
+        assertNull(EndlessQueue.seed(emptyList(), spotify = true))
     }
 
     @Test fun pickSkipsQueuedAndRecentTracks() {
@@ -34,9 +35,9 @@ class EndlessQueueTest {
         assertEquals(listOf(2, 3, 5, 6).map { "spotify:track:$it" }, EndlessQueue.pick(candidates, excluded).map(Music::id))
     }
 
-    @Test fun pickKeepsEachTrackOnceAndOnlySpotifyTracks() {
-        val candidates = listOf(spotify(1), spotify(1), track("ytm:track:x"), spotify(2), track("spotify:episode:e"))
-        assertEquals(listOf("spotify:track:1", "spotify:track:2"), EndlessQueue.pick(candidates, emptySet()).map(Music::id))
+    @Test fun pickKeepsEachTrackOnceAndOnlyTracks() {
+        val candidates = listOf(spotify(1), spotify(1), track("ytm:track:x"), spotify(2), track("spotify:episode:e"), track("ytm:track:x"))
+        assertEquals(listOf("spotify:track:1", "ytm:track:x", "spotify:track:2"), EndlessQueue.pick(candidates, emptySet()).map(Music::id))
     }
 
     @Test fun pickStopsAtTheLimit() {

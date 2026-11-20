@@ -195,9 +195,9 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
         val fetch = autoplay ?: return
         if (!autoplayArmed || autoplayJob?.isActive == true) return
         if (!fr.spotifeur.data.preferences.SettingsStore.get(appContext).settings.value.endlessQueue) return
-        if (!fr.spotifeur.data.SpotifyAccount.signedIn || !fr.spotifeur.data.NetworkMonitor.online.value) return
+        if (!fr.spotifeur.data.NetworkMonitor.online.value) return
         val window = (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
-        val seed = EndlessQueue.seed(window) ?: return
+        val seed = EndlessQueue.seed(window, spotify = fr.spotifeur.data.SpotifyAccount.signedIn) ?: return
         val excluded = (before + window).mapTo(HashSet(), Music::id)
         autoplayJob = scope.launch {
             val added = fetch(seed, excluded)

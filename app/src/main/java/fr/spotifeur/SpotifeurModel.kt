@@ -864,14 +864,16 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
     init {
-        // The endless queue reads the radio of the last Spotify track. One failure is reported, then
-        // the player stops asking until the next playback starts.
+        // The endless queue reads YouTube Music's automix for a YouTube Music track, Spotify's radio for
+        // a Spotify track. One failure is reported, then the player stops asking until the next playback.
         player.autoplay = autoplay@{ seed, queued ->
-            val source = radio ?: return@autoplay null
             try {
+                val videoId = seed.youTubeVideoId
+                val similar = if (videoId != null) withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }
+                    else (radio ?: return@autoplay null).station(seed).tracks
                 val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
                     .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track.id }
-                fr.spotifeur.playback.EndlessQueue.pick(source.station(seed).tracks, queued + recent)
+                fr.spotifeur.playback.EndlessQueue.pick(similar, queued + recent)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed); null }
         }

@@ -33,7 +33,7 @@ data class AppSettings(
     val pauseOnVolumeZero: Boolean = false,
     val resumeOnHeadphones: Boolean = false,
     val persistentShuffle: Boolean = false,
-    /** When the queue runs out, similar Spotify tracks are added so playback keeps going. */
+    /** When the queue runs out, similar tracks are added so playback keeps going. */
     val endlessQueue: Boolean = false,
     val showQueueHistory: Boolean = true,
     val audioCacheLimitMb: Int = 4096,
