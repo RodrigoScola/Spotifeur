@@ -19,6 +19,7 @@ import fr.spotifeur.data.SpotifyFailure
 import fr.spotifeur.data.isLocalTrack
 import fr.spotifeur.BuildConfig
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,8 @@ data class Playback(
     val audioFormat: String = "",
     /** Tracks the user queued, waiting right after the current one. */
     val queuedCount: Int = 0,
+    /** Index in [queue] of the first track the endless queue added, or -1. */
+    val autoplayStart: Int = -1,
 ) { val track: Music? get() = queue.getOrNull(index) }
 
 /** Outlives the activity, like the playback service whose queue it describes. */
@@ -53,7 +56,7 @@ private object ShuffleMemory {
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
+class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoCloseable {
     private val appContext = context.applicationContext
     private val mutableState = MutableStateFlow(Playback())
     val state = mutableState.asStateFlow()
@@ -81,6 +84,15 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
      */
     private var before: List<Music> = emptyList()
     private var after: List<Music> = emptyList()
+    /**
+     * Similar tracks for the endless queue, given a seed and the ids already in the context.
+     * Returns null when they could not be fetched. Set by the model, which holds the Spotify session.
+     */
+    var autoplay: (suspend (seed: Music, excluded: Set<String>) -> List<Music>?)? = null
+    private var autoplayJob: Job? = null
+    /** Off after a stop, a cleared queue or a failed or empty fetch, until the next [play]. */
+    private var autoplayArmed = true
+    private var autoplayStart = -1
     init {
         ShuffleMemory.load(appContext)
         future.addListener({
@@ -96,6 +108,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         if (!selected.isPlayableTrack()) return
         val playable = queue.filter(Music::isPlayableTrack)
         val first = queue.take(index).count(Music::isPlayableTrack)
+        autoplayJob?.cancel(); autoplayArmed = true
         // Shuffle reorders the queue itself: the chosen track plays first and every other one follows.
         ShuffleMemory.original = playable.takeIf { ShuffleMemory.enabled }
         val tracks = if (ShuffleMemory.enabled) listOf(playable[first]) + (playable.take(first) + playable.drop(first + 1)).shuffled() else playable
@@ -166,6 +179,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
                 player.addMediaItems(chunk.map(::mediaItem)); queueChanged = true
             }
         }
+        if (EndlessQueue.shouldExtend(player.mediaItemCount - 1 - current, after.size, player.repeatMode)) extend(player)
         if (current < REFILL_AT && before.isNotEmpty()) {
             val chunk = before.takeLast(CHUNK)
             before = before.dropLast(CHUNK)
@@ -174,6 +188,26 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
             val dropped = (0 until current - WINDOW_BEHIND).map { music(player.getMediaItemAt(it)) }
             before = before + dropped
             player.removeMediaItems(0, dropped.size); queueChanged = true
+        }
+    }
+    /** Appends similar tracks at the end, after the context and the user's queue, which stay as they are. */
+    private fun extend(player: Player) {
+        val fetch = autoplay ?: return
+        if (!autoplayArmed || autoplayJob?.isActive == true) return
+        if (!fr.spotifeur.data.preferences.SettingsStore.get(appContext).settings.value.endlessQueue) return
+        if (!fr.spotifeur.data.SpotifyAccount.signedIn || !fr.spotifeur.data.NetworkMonitor.online.value) return
+        val window = (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
+        val seed = EndlessQueue.seed(window) ?: return
+        val excluded = (before + window).mapTo(HashSet(), Music::id)
+        autoplayJob = scope.launch {
+            val added = fetch(seed, excluded)
+            // Cancelled by play(), stop() or a cleared queue: a late answer is dropped with the coroutine.
+            if (added.isNullOrEmpty()) { autoplayArmed = false; return@launch }
+            val ended = player.playbackState == Player.STATE_ENDED
+            player.addMediaItems(added.map { mediaItem(it, auto = true) })
+            ShuffleMemory.original = ShuffleMemory.original?.plus(added)
+            if (ended) player.seekToNextMediaItem()
+            queueChanged = true; update(player)
         }
     }
     fun toggle() {
@@ -231,6 +265,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
     fun repeat() { controller?.let { it.repeatMode = (it.repeatMode + 1) % 3 } }
     fun stop() {
         pending = null; ShuffleMemory.original = null
+        autoplayJob?.cancel(); autoplayArmed = false
         queueChanged = true
         before = emptyList(); after = emptyList()
         controller?.stop(); controller?.clearMediaItems(); mutableState.value = Playback(shuffle = ShuffleMemory.enabled)
@@ -265,6 +300,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         if (current + 1 < player.mediaItemCount) player.removeMediaItems(current + 1, player.mediaItemCount)
         if (current > 0) player.removeMediaItems(0, current)
         ShuffleMemory.original = null
+        autoplayJob?.cancel(); autoplayArmed = false
         before = emptyList(); after = emptyList()
         queueChanged = true
         update(player)
@@ -273,6 +309,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         refill(player)
         if (queueChanged || queue.size != player.mediaItemCount) {
             queue = (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
+            autoplayStart = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).isAuto() } ?: -1
             queueChanged = false
         }
         val index = player.currentMediaItemIndex.coerceAtLeast(0)
@@ -287,7 +324,7 @@ class SpotifyPlayer(context: Context, scope: CoroutineScope) : AutoCloseable {
         mutableState.value = Playback(queue, index, player.isPlaying, player.playbackState == Player.STATE_BUFFERING,
             player.currentPosition.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             ShuffleMemory.enabled, player.repeatMode, error, player.hasNextMediaItem() || after.isNotEmpty(), player.playWhenReady, currentAudioFormat(player),
-            userQueue(player).size)
+            userQueue(player).size, autoplayStart)
     }
     private companion object {
         const val WINDOW_BEHIND = 20
@@ -332,9 +369,12 @@ private fun Music.isPlayableTrack(): Boolean = kind == MusicKind.Track &&
 /** Set on the tracks the user queued ("Add to queue", "Play next"). */
 private const val QUEUED = "queued"
 private fun MediaItem.isQueued(): Boolean = mediaMetadata.extras?.getBoolean(QUEUED) == true
+/** Set on the tracks the endless queue added, to tell them apart from the user's. */
+private const val AUTO = "autoplay"
+private fun MediaItem.isAuto(): Boolean = mediaMetadata.extras?.getBoolean(AUTO) == true
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun mediaItem(track: Music, queued: Boolean = false): MediaItem {
+private fun mediaItem(track: Music, queued: Boolean = false, auto: Boolean = false): MediaItem {
     // YouTube Music tracks, and Spotify tracks without a Spotify account, are read from YouTube Music.
     val youtube = YouTubeUris.of(track, fr.spotifeur.data.SpotifyAccount.signedIn)
     val spotify = youtube == null && !track.isLocalTrack
@@ -351,6 +391,7 @@ private fun mediaItem(track: Music, queued: Boolean = false): MediaItem {
                 putInt("duration", track.durationMs); putInt("artwork", track.artwork)
                 putString("album", track.album); putString("mediaUri", track.mediaUri); putString("quality", track.quality)
                 if (queued) putBoolean(QUEUED, true)
+                if (auto) putBoolean(AUTO, true)
             }).build()).build()
 }
 private fun music(item: MediaItem) = musicOf(item)

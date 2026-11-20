@@ -863,6 +863,19 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
             catch (failure: Exception) { mutableMessage.value = readable(failure) }
         }
     }
+    init {
+        // The endless queue reads the radio of the last Spotify track. One failure is reported, then
+        // the player stops asking until the next playback starts.
+        player.autoplay = autoplay@{ seed, queued ->
+            val source = radio ?: return@autoplay null
+            try {
+                val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
+                    .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track.id }
+                fr.spotifeur.playback.EndlessQueue.pick(source.station(seed).tracks, queued + recent)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed); null }
+        }
+    }
     /** Album and artists of a track, read through the catalogue contract used by detail pages. */
     /**
      * The album and artists of a track. Spotify tracks use Spotify's pages when an account is signed in;
