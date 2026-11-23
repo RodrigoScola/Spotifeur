@@ -99,7 +99,7 @@ data class LibraryUi(val content: HomeLibrary? = null, val loading: Boolean = fa
 data class DetailUi(val content: CatalogDetail? = null, val loading: Boolean = false, val error: String? = null)
 
 class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
-    val player = SpotifyPlayer(app, viewModelScope)
+    val player = SpotifyPlayer(app, viewModelScope, ::endlessTracks)
     private val pinnedStore = PinnedStore(app)
     val pins = pinnedStore.pins
     fun togglePin(item: Music) = pinnedStore.toggle(item)
@@ -865,18 +865,19 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     }
     /** The endless queue's failure message was shown and nothing was found since. */
     private var endlessWarned = false
-    init {
-        // The endless queue interleaves the similar tracks of every seed, as the playlist recommendations do.
-        // Seeds are read one after the other, so YouTube Music never gets a burst of requests.
-        player.autoplay = { seeds, context ->
-            val stations = seeds.map { similarTo(it) }
-            val found = stations.any(List<Music>::isNotEmpty)
-            if (!found && !endlessWarned) mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed)
-            endlessWarned = !found
-            val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
-                .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track }
-            fr.spotifeur.playback.EndlessQueue.pick(fr.spotifeur.data.interleaveStations(stations, Int.MAX_VALUE), context + recent)
-        }
+    /**
+     * The endless queue: the similar tracks of every seed interleaved, as the playlist recommendations do,
+     * without the context and recent plays. Seeds are read one after the other, so YouTube Music never
+     * gets a burst of requests.
+     */
+    private suspend fun endlessTracks(seeds: List<Music>, context: List<Music>): List<Music> {
+        val stations = seeds.map { similarTo(it) }
+        val found = stations.any(List<Music>::isNotEmpty)
+        if (!found && !endlessWarned) mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed)
+        endlessWarned = !found
+        val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
+            .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track }
+        return fr.spotifeur.playback.EndlessQueue.pick(fr.spotifeur.data.interleaveStations(stations, Int.MAX_VALUE), context + recent)
     }
     /**
      * Spotify's radio for a Spotify track while signed in. Otherwise, or when the radio fails, YouTube
@@ -886,7 +887,6 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         val station = radio?.takeIf { seed.youTubeVideoId == null }?.let { source ->
             try { source.station(seed).tracks }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (auth: SpotifyAuthRequired) { accountLost(auth); null }
             catch (_: Exception) { null }
         }
         station ?: youTubeVideoIdOf(seed)?.let { videoId ->

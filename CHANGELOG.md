@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- Endless queue (Settings → Playback, off by default). When fewer than three tracks remain after the whole playlist or album, up to ten similar tracks are added at the end, under their own "Autoplay" section of the queue. The seeds are the last track and four tracks spread over the context. A Spotify track uses Spotify's radio while signed in; a YouTube Music track, or a Spotify track without an account or whose radio fails, uses YouTube Music's automix of its recording (`next` with the `RDAMVM` playlist). Tracks already in the context or among the last 50 plays are skipped, also under another source. Nothing is added offline, with repeat on, after a stop or after the queue is cleared; a refill that finds nothing is retried once after a minute, with at most one message.
 
 ## v1.6.0
 

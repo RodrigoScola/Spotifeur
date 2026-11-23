@@ -36,7 +36,7 @@ data class Playback(
     val audioFormat: String = "",
     /** Tracks the user queued, waiting right after the current one. */
     val queuedCount: Int = 0,
-    /** Index in [queue] of the first track the endless queue added, or -1. */
+    /** Index in [queue] of the next track the endless queue added, or -1. */
     val autoplayStart: Int = -1,
 ) { val track: Music? get() = queue.getOrNull(index) }
 
@@ -57,7 +57,12 @@ private object ShuffleMemory {
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoCloseable {
+class SpotifyPlayer(
+    context: Context,
+    private val scope: CoroutineScope,
+    /** Similar tracks for the endless queue, given seeds from the context and the context itself. */
+    private val similarTracks: suspend (seeds: List<Music>, context: List<Music>) -> List<Music> = { _, _ -> emptyList() },
+) : AutoCloseable {
     private val appContext = context.applicationContext
     private val mutableState = MutableStateFlow(Playback())
     val state = mutableState.asStateFlow()
@@ -85,11 +90,6 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
      */
     private var before: List<Music> = emptyList()
     private var after: List<Music> = emptyList()
-    /**
-     * Similar tracks for the endless queue, given seeds from the context and the context itself.
-     * Set by the model, which holds the Spotify session.
-     */
-    var autoplay: (suspend (seeds: List<Music>, context: List<Music>) -> List<Music>)? = null
     private var autoplayJob: Job? = null
     /** The tracks the endless queue added, to tell them apart from the user's. */
     private val autoplayIds = HashSet<String>()
@@ -98,7 +98,6 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
      * none until the next playback; none either after a stop or a cleared queue.
      */
     private var autoplayPausedUntil = 0L
-    private var autoplayStart = -1
     /** A new playback turns the endless queue back on; a stop or a cleared queue turns it off. */
     private fun resetAutoplay(on: Boolean) {
         autoplayJob?.cancel(); autoplayIds.clear()
@@ -190,7 +189,7 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
                 player.addMediaItems(chunk.map(::mediaItem)); queueChanged = true
             }
         }
-        if (EndlessQueue.shouldExtend(player.mediaItemCount - 1 - current, after.size, player.repeatMode)) extend(player)
+        if (EndlessQueue.shouldExtend(player.mediaItemCount - 1 - current, after.size)) extend(player)
         if (current < REFILL_AT && before.isNotEmpty()) {
             val chunk = before.takeLast(CHUNK)
             before = before.dropLast(CHUNK)
@@ -203,12 +202,13 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
     }
     /** Appends similar tracks at the end, after the context and the user's queue, which stay as they are. */
     private fun extend(player: Player) {
-        val fetch = autoplay ?: return
         if (!autoplayEnabled(player) || autoplayJob?.isActive == true || SystemClock.elapsedRealtime() < autoplayPausedUntil) return
+        // A retry never restarts a queue that has already ended.
+        if (player.playbackState == Player.STATE_ENDED && autoplayPausedUntil != 0L) return
         val context = before + (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
-        val seeds = EndlessQueue.seeds(context).ifEmpty { return }
+        val seeds = EndlessQueue.seeds(context).ifEmpty { autoplayPausedUntil = Long.MAX_VALUE; return }
         autoplayJob = scope.launch {
-            val added = fetch(seeds, context)
+            val added = similarTracks(seeds, context)
             // Cancelled by play(), stop() or a cleared queue: a late answer is dropped with the coroutine.
             // The setting or repeat may have changed meanwhile.
             if (!autoplayEnabled(player)) return@launch
@@ -329,7 +329,6 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
         refill(player)
         if (queueChanged || queue.size != player.mediaItemCount) {
             queue = (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
-            autoplayStart = if (autoplayIds.isEmpty()) -1 else queue.indexOfFirst { it.id in autoplayIds }
             queueChanged = false
         }
         val index = player.currentMediaItemIndex.coerceAtLeast(0)
@@ -341,10 +340,11 @@ class SpotifyPlayer(context: Context, private val scope: CoroutineScope) : AutoC
                 ?: if (!fr.spotifeur.data.NetworkMonitor.online.value) "This track is not available offline."
                 else playbackErrorMessage(failure.errorCode)
         }
+        val queued = userQueue(player).size
         mutableState.value = Playback(queue, index, player.isPlaying, player.playbackState == Player.STATE_BUFFERING,
             player.currentPosition.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), duration.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             ShuffleMemory.enabled, player.repeatMode, error, player.hasNextMediaItem() || after.isNotEmpty(), player.playWhenReady, currentAudioFormat(player),
-            userQueue(player).size, autoplayStart)
+            queued, (index + 1 + queued until queue.size).firstOrNull { queue[it].id in autoplayIds } ?: -1)
     }
     private companion object {
         const val WINDOW_BEHIND = 20

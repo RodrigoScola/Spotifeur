@@ -1,6 +1,5 @@
 package fr.spotifeur.playback
 
-import androidx.media3.common.Player
 import fr.spotifeur.data.Music
 import fr.spotifeur.data.spreadAlbumSeeds
 import fr.spotifeur.data.youtube.YTM_TRACK_PREFIX
@@ -16,9 +15,8 @@ internal object EndlessQueue {
     /** Seeds per refill: the last track, then tracks spread over the rest of the context. */
     const val SEEDS = 5
 
-    /** Only once the whole context has been loaded and nothing would repeat it. */
-    fun shouldExtend(remaining: Int, contextLeft: Int, repeatMode: Int): Boolean =
-        contextLeft == 0 && repeatMode == Player.REPEAT_MODE_OFF && remaining < THRESHOLD
+    /** Only once the whole context has been loaded. */
+    fun shouldExtend(remaining: Int, contextLeft: Int): Boolean = contextLeft == 0 && remaining < THRESHOLD
 
     /** The last Spotify or YouTube Music track, then others spread over the context, so all of it counts. */
     fun seeds(context: List<Music>, count: Int = SEEDS): List<Music> {

@@ -1,6 +1,5 @@
 package fr.spotifeur.playback
 
-import androidx.media3.common.Player
 import fr.spotifeur.data.Music
 import fr.spotifeur.data.MusicKind
 import org.junit.Assert.assertEquals
@@ -13,11 +12,9 @@ class EndlessQueueTest {
     private fun spotify(n: Int) = track("spotify:track:$n")
 
     @Test fun extendsOnlyNearTheEndOfAFullyLoadedContext() {
-        assertTrue(EndlessQueue.shouldExtend(remaining = 2, contextLeft = 0, repeatMode = Player.REPEAT_MODE_OFF))
-        assertFalse(EndlessQueue.shouldExtend(remaining = 3, contextLeft = 0, repeatMode = Player.REPEAT_MODE_OFF))
-        assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 40, repeatMode = Player.REPEAT_MODE_OFF))
-        assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 0, repeatMode = Player.REPEAT_MODE_ALL))
-        assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 0, repeatMode = Player.REPEAT_MODE_ONE))
+        assertTrue(EndlessQueue.shouldExtend(remaining = 2, contextLeft = 0))
+        assertFalse(EndlessQueue.shouldExtend(remaining = 3, contextLeft = 0))
+        assertFalse(EndlessQueue.shouldExtend(remaining = 0, contextLeft = 40))
     }
 
     @Test fun seedsStartWithTheLastTrackThenSpreadOverTheContext() {

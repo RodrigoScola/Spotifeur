@@ -866,7 +866,7 @@ fun QueueBottomSheet(
                                     val firstQueued = queuedCount > 0 && queueIndex == currentSongIndex + 1
                                     val firstFromList = queuedCount > 0 && queueIndex == currentSongIndex + queuedCount + 1
                                     // The tracks the endless queue added follow everything else.
-                                    val firstAuto = autoplayState.value > currentSongIndex && queueIndex == autoplayState.value
+                                    val firstAuto = queueIndex == autoplayState.value
                                     val divided = !firstQueued && (firstFromList || firstAuto)
                                     Column(Modifier.fillMaxWidth()) {
                                     if (firstQueued || divided) Column(Modifier.fillMaxWidth().padding(top = if (divided) 6.dp else 0.dp)) {

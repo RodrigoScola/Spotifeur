@@ -238,10 +238,15 @@ object YouTubePages {
     private val PLAYS = Regex("^([\\d.,]+[KMB]?) (?:plays|views)$")
 }
 
-/** The tracks of a `next` queue panel, in order. */
+/** The tracks of a `next` queue panel, in order, without the music video counterpart of a song. */
 internal fun parseAutomix(response: JSONObject): List<Music> {
     val tracks = mutableListOf<Music>()
+    val counterparts = HashSet<String>()
     walkJson(response) { node ->
+        // A song with a music video comes as a wrapper: the song first, the video as its counterpart.
+        walkJson(node.optJSONArray("counterpart")) { part ->
+            part.optJSONObject("playlistPanelVideoRenderer")?.optString("videoId")?.let(counterparts::add)
+        }
         val panel = node.optJSONObject("playlistPanelVideoRenderer") ?: return@walkJson
         val videoId = panel.optString("videoId").takeIf(String::isNotBlank) ?: return@walkJson
         val text = { key: String -> panel.optJSONObject(key)?.optJSONArray("runs")?.optJSONObject(0)?.optString("text").orEmpty() }
@@ -250,7 +255,7 @@ internal fun parseAutomix(response: JSONObject): List<Music> {
             imageUrl = largestYouTubeImage(thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url"), videoId),
             durationMs = text("lengthText").takeIf(String::isNotBlank)?.let(::durationMs) ?: 0)
     }
-    return tracks
+    return tracks.filter { it.youTubeVideoId !in counterparts }
 }
 
 /** "28.3M", "150K", "1.2B": the approximate value YouTube abbreviates. */

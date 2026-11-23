@@ -24,6 +24,13 @@ class YouTubeAutomixTest {
         assertEquals(listOf(185_000, 3_723_000), tracks.map { it.durationMs })
     }
 
+    @Test fun aSongsMusicVideoCounterpartIsLeftOut() {
+        val response = JSONObject("""{"contents": [{"playlistPanelVideoWrapperRenderer": {
+            "primaryRenderer": ${panel("song", "Dare", "Gorillaz", "4:05")},
+            "counterpart": [{"counterpartRenderer": ${panel("video", "DARE (Official Video)", "Gorillaz", "4:20")}}]}}]}""")
+        assertEquals(listOf("ytm:track:song"), parseAutomix(response).map { it.id })
+    }
+
     @Test fun emptyResponseHasNoTracks() {
         assertTrue(parseAutomix(JSONObject("{}")).isEmpty())
     }
