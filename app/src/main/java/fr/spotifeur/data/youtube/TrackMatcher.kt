@@ -34,6 +34,11 @@ object TrackMatcher {
         return videoId
     }
 
+    /** Blocking: the YouTube Music recording of a track, its own or the match of a Spotify track. */
+    fun videoIdOf(track: Music): String? = track.youTubeVideoId ?: resolve(MatchQuery(
+        key = track.id, title = track.title, artists = track.subtitle, durationMs = track.durationMs, album = track.album,
+    ))
+
     fun forget(key: String) = preferences?.edit { remove(key) }
 
     /** The candidate with the highest score, if it reaches [ACCEPTED]. Songs get a small advantage over videos. */

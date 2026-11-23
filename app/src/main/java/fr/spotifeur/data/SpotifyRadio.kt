@@ -21,8 +21,12 @@ import org.json.JSONObject
 internal class SpotifyRadio(
     private val transport: SpotifyTransport,
     private val session: SpotifySession,
-) {
+) : SimilarTracksSource {
     private val catalog = SpotifyCatalog(transport, session)
+
+    /** The endless queue uses the radio of a Spotify track. */
+    override fun accepts(seed: Music) = seed.id.startsWith("spotify:track:")
+    override suspend fun similarTo(seed: Music): List<Music> = station(seed).tracks
 
     suspend fun station(seed: Music): CatalogDetail =
         if (seed.kind == MusicKind.Album) albumStation(seed) else seedStation(seed)

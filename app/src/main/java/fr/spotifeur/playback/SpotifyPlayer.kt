@@ -60,8 +60,8 @@ private object ShuffleMemory {
 class SpotifyPlayer(
     context: Context,
     private val scope: CoroutineScope,
-    /** Similar tracks for the endless queue, given seeds from the context and the context itself. */
-    private val similarTracks: suspend (seeds: List<Music>, context: List<Music>) -> List<Music> = { _, _ -> emptyList() },
+    /** Similar tracks for the endless queue, to add after the given context. */
+    private val similarTracks: suspend (context: List<Music>) -> List<Music> = { emptyList() },
 ) : AutoCloseable {
     private val appContext = context.applicationContext
     private val mutableState = MutableStateFlow(Playback())
@@ -206,9 +206,8 @@ class SpotifyPlayer(
         // A retry never restarts a queue that has already ended.
         if (player.playbackState == Player.STATE_ENDED && autoplayPausedUntil != 0L) return
         val context = before + (0 until player.mediaItemCount).map { music(player.getMediaItemAt(it)) }
-        val seeds = EndlessQueue.seeds(context).ifEmpty { autoplayPausedUntil = Long.MAX_VALUE; return }
         autoplayJob = scope.launch {
-            val added = similarTracks(seeds, context)
+            val added = similarTracks(context).filter(Music::isPlayableTrack)
             // Cancelled by play(), stop() or a cleared queue: a late answer is dropped with the coroutine.
             // The setting or repeat may have changed meanwhile.
             if (!autoplayEnabled(player)) return@launch

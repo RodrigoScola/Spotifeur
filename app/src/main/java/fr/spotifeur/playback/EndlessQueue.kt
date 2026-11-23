@@ -2,7 +2,6 @@ package fr.spotifeur.playback
 
 import fr.spotifeur.data.Music
 import fr.spotifeur.data.spreadAlbumSeeds
-import fr.spotifeur.data.youtube.YTM_TRACK_PREFIX
 
 /** The endless queue: similar tracks added when the queue is about to run out. */
 internal object EndlessQueue {
@@ -18,9 +17,9 @@ internal object EndlessQueue {
     /** Only once the whole context has been loaded. */
     fun shouldExtend(remaining: Int, contextLeft: Int): Boolean = contextLeft == 0 && remaining < THRESHOLD
 
-    /** The last Spotify or YouTube Music track, then others spread over the context, so all of it counts. */
-    fun seeds(context: List<Music>, count: Int = SEEDS): List<Music> {
-        val tracks = context.filter(::isStreamed)
+    /** The last track a source [accepts], then others spread over the context, so all of it counts. */
+    fun seeds(context: List<Music>, count: Int = SEEDS, accepts: (Music) -> Boolean): List<Music> {
+        val tracks = context.filter(accepts)
         val last = tracks.lastOrNull() ?: return emptyList()
         return listOf(last) + spreadAlbumSeeds(tracks.filter { it.id != last.id }.distinctBy(Music::id), count - 1)
     }
@@ -31,10 +30,9 @@ internal object EndlessQueue {
      */
     fun pick(candidates: List<Music>, excluded: List<Music>, limit: Int = BATCH): List<Music> {
         val seen = excluded.flatMapTo(HashSet()) { listOf(it.id, song(it)) }
-        return candidates.filter { isStreamed(it) && seen.add(it.id) and seen.add(song(it)) }.take(limit)
+        return candidates.filter { seen.add(it.id) and seen.add(song(it)) }.take(limit)
     }
 
-    private fun isStreamed(track: Music) = track.id.startsWith("spotify:track:") || track.id.startsWith(YTM_TRACK_PREFIX)
     private fun song(track: Music) = if (track.title.isBlank()) track.id
         else "${track.title.trim().lowercase()}|${track.subtitle.substringBefore(',').trim().lowercase()}"
 }

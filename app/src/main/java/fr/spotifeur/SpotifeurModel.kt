@@ -866,38 +866,25 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
     /** The endless queue's failure message was shown and nothing was found since. */
     private var endlessWarned = false
     /**
-     * The endless queue: the similar tracks of every seed interleaved, as the playlist recommendations do,
-     * without the context and recent plays. Seeds are read one after the other, so YouTube Music never
-     * gets a burst of requests.
+     * Where the endless queue finds similar tracks, tried in this order for each seed: Spotify's radio while
+     * signed in, then YouTube Music's automix. Another service is one more [fr.spotifeur.data.SimilarTracksSource].
      */
-    private suspend fun endlessTracks(seeds: List<Music>, context: List<Music>): List<Music> {
-        val stations = seeds.map { similarTo(it) }
+    private val similarSources get() = listOfNotNull(radio, fr.spotifeur.data.youtube.YouTubeAutomix)
+    /**
+     * The endless queue: the similar tracks of seeds spread over the context, interleaved as the playlist
+     * recommendations do, without the context and recent plays.
+     */
+    private suspend fun endlessTracks(context: List<Music>): List<Music> {
+        val sources = similarSources
+        val seeds = fr.spotifeur.playback.EndlessQueue.seeds(context) { seed -> sources.any { it.accepts(seed) } }
+        if (seeds.isEmpty()) return emptyList()
+        val stations = fr.spotifeur.data.similarTracks(seeds, sources)
         val found = stations.any(List<Music>::isNotEmpty)
         if (!found && !endlessWarned) mutableMessage.value = app.getString(fr.spotifeur.R.string.endless_queue_failed)
         endlessWarned = !found
         val recent = withContext(Dispatchers.IO) { listeningHistory.load(); listeningHistory.entries.value }
             .take(fr.spotifeur.playback.EndlessQueue.HISTORY).map { it.track }
         return fr.spotifeur.playback.EndlessQueue.pick(fr.spotifeur.data.interleaveStations(stations, Int.MAX_VALUE), context + recent)
-    }
-    /**
-     * Spotify's radio for a Spotify track while signed in. Otherwise, or when the radio fails, YouTube
-     * Music's automix of the track or of its YouTube Music match, without that match. Empty when neither answers.
-     */
-    private suspend fun similarTo(seed: Music): List<Music> = try {
-        val station = radio?.takeIf { seed.youTubeVideoId == null }?.let { source ->
-            try { source.station(seed).tracks }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { null }
-        }
-        station ?: youTubeVideoIdOf(seed)?.let { videoId ->
-            withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.automix(videoId) }.filter { it.youTubeVideoId != videoId }
-        }.orEmpty()
-    } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { emptyList() }
-    /** The YouTube Music recording of a track: its own, or the match of a Spotify track. */
-    private suspend fun youTubeVideoIdOf(track: Music): String? = track.youTubeVideoId ?: withContext(Dispatchers.IO) {
-        fr.spotifeur.data.youtube.TrackMatcher.resolve(fr.spotifeur.data.youtube.MatchQuery(
-            key = track.id, title = track.title, artists = track.subtitle, durationMs = track.durationMs, album = track.album,
-        ))
     }
     /** Album and artists of a track, read through the catalogue contract used by detail pages. */
     /**
@@ -908,7 +895,7 @@ class SpotifeurModel(private val app: Application) : AndroidViewModel(app) {
         if (track.isLocalTrack) return emptyList()
         if (track.source == fr.spotifeur.data.MusicSource.Spotify && catalog != null) return detailForActions(track)?.related.orEmpty()
         if (!online.value) return emptyList()
-        val videoId = youTubeVideoIdOf(track) ?: return emptyList()
+        val videoId = withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.TrackMatcher.videoIdOf(track) } ?: return emptyList()
         val found = withContext(Dispatchers.IO) { fr.spotifeur.data.youtube.YouTubePages.relations(videoId, track.title, track.subtitle) }
             ?: return emptyList()
         return listOfNotNull(found.album) + found.artists

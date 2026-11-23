@@ -238,6 +238,18 @@ object YouTubePages {
     private val PLAYS = Regex("^([\\d.,]+[KMB]?) (?:plays|views)$")
 }
 
+/**
+ * YouTube Music's automix for the endless queue: of a YouTube Music track, or of a Spotify track's
+ * match, which also makes it the fallback of the Spotify radio. The seed itself is left out.
+ */
+object YouTubeAutomix : fr.spotifeur.data.SimilarTracksSource {
+    override fun accepts(seed: Music) = seed.isYouTubeTrack || seed.id.startsWith("spotify:track:")
+    override suspend fun similarTo(seed: Music): List<Music> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val videoId = TrackMatcher.videoIdOf(seed) ?: return@withContext emptyList()
+        YouTubePages.automix(videoId).filter { it.youTubeVideoId != videoId }
+    }
+}
+
 /** The tracks of a `next` queue panel, in order, without the music video counterpart of a song. */
 internal fun parseAutomix(response: JSONObject): List<Music> {
     val tracks = mutableListOf<Music>()
